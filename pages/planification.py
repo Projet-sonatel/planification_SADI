@@ -326,8 +326,7 @@ with tab1:
             st.dataframe(
                 df_affichage,
                 use_container_width=True,
-                hide_index=True,
-                height=500
+                hide_index=True
             )
         else:
             st.warning("Aucune donnée pour ces filtres")
@@ -413,8 +412,7 @@ with tab3:
         st.dataframe(
             df_affichage,
             use_container_width=True,
-            hide_index=True,
-            height=300
+            hide_index=True
         )
 
         st.markdown("---")

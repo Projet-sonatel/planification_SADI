@@ -3,21 +3,141 @@ import pandas as pd
 import calendar
 from datetime import datetime
 import sqlite3
-import os
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="SADI - Planification Mensuelle", layout="wide")
+st.set_page_config(
+    page_title="Planification SADI",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# Nom de la base de données
+# CSS personnalisé - Couleurs Sonatel
+st.markdown("""
+    <style>
+    /* Couleurs Sonatel */
+    :root {
+        --sonatel-orange: #FF6600;
+        --sonatel-blue: #003D7A;
+        --sonatel-light-blue: #0066CC;
+    }
+
+    /* En-tête principal */
+    h1 {
+        color: #003D7A;
+        font-weight: 700;
+        padding-bottom: 10px;
+    }
+
+    h2, h3 {
+        color: #003D7A;
+    }
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+        background-color: #f5f5f5;
+        padding: 5px;
+        border-radius: 8px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        background-color: transparent;
+        color: #003D7A;
+        font-weight: 500;
+        border-radius: 6px;
+        padding: 10px 20px;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #FF6600;
+        color: white;
+    }
+
+    /* Boutons primaires */
+    .stButton>button[kind="primary"] {
+        background: linear-gradient(135deg, #FF6600 0%, #FF8533 100%);
+        color: white;
+        border: none;
+        font-weight: 600;
+        padding: 0.5rem 2rem;
+        border-radius: 8px;
+        transition: all 0.3s;
+    }
+
+    .stButton>button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #E65C00 0%, #FF6600 100%);
+        box-shadow: 0 4px 12px rgba(255, 102, 0, 0.3);
+    }
+
+    /* Métriques */
+    [data-testid="stMetricValue"] {
+        color: #003D7A;
+        font-weight: 600;
+    }
+
+    [data-testid="stMetricLabel"] {
+        color: #666;
+    }
+
+    /* Tableaux */
+    .stDataFrame {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+    }
+
+    /* Cards/Containers */
+    [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+        background-color: #ffffff;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    /* Messages */
+    .stAlert {
+        border-radius: 8px;
+        border-left: 4px solid #FF6600;
+    }
+
+    /* Checkbox personnalisé */
+    .stCheckbox label {
+        font-weight: 500;
+        color: #003D7A;
+    }
+
+    /* Selectbox */
+    .stSelectbox label {
+        color: #003D7A;
+        font-weight: 500;
+    }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+    }
+
+    /* Graphiques */
+    .stBarChart {
+        border-radius: 8px;
+    }
+
+    /* Footer */
+    footer {visibility: hidden;}
+
+    /* Séparateurs */
+    hr {
+        margin: 2rem 0;
+        border-color: #e0e0e0;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 DB_FILE = "planifications_sadi.db"
 
-# --- FONCTIONS DE GESTION DE LA BASE DE DONNÉES ---
+# --- FONCTIONS BASE DE DONNÉES ---
 def init_database():
-    """Initialise la base de données SQLite"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-
-    # Créer la table si elle n'existe pas
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS planifications (
             ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,16 +155,13 @@ def init_database():
             Date_Creation TEXT
         )
     ''')
-
     conn.commit()
     conn.close()
 
 def sauvegarder_planification(data):
-    """Sauvegarde une nouvelle planification dans la base de données"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-
         cursor.execute('''
             INSERT INTO planifications
             (SADI, Mois, Annee, Animation, VTO, Bus, Jours, Nb_Jours, Budget_Resto, Budget_Bus, Total, Date_Creation)
@@ -54,39 +171,31 @@ def sauvegarder_planification(data):
             data['VTO'], data['Bus'], data['Jours'], data['Nb Jours'],
             data['Budget Resto'], data['Budget Bus'], data['Total'], data['Date_Creation']
         ))
-
         conn.commit()
         conn.close()
         return True
-    except Exception as e:
-        st.error(f"Erreur lors de la sauvegarde : {str(e)}")
+    except:
         return False
 
 def charger_toutes_planifications():
-    """Charge toutes les planifications depuis la base de données"""
     try:
         conn = sqlite3.connect(DB_FILE)
         df = pd.read_sql_query("SELECT * FROM planifications ORDER BY ID DESC", conn)
         conn.close()
-
-        # Renommer les colonnes pour correspondre à l'ancien format
         if not df.empty:
             df.rename(columns={
                 'Nb_Jours': 'Nb Jours',
                 'Budget_Resto': 'Budget Resto',
                 'Budget_Bus': 'Budget Bus'
             }, inplace=True)
-
         return df
-    except Exception as e:
+    except:
         return pd.DataFrame()
 
 def modifier_planification(id_planif, data):
-    """Modifie une planification existante"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-
         cursor.execute('''
             UPDATE planifications
             SET SADI=?, Mois=?, Annee=?, Animation=?, VTO=?, Bus=?,
@@ -97,126 +206,104 @@ def modifier_planification(id_planif, data):
             data['VTO'], data['Bus'], data['Jours'], data['Nb Jours'],
             data['Budget Resto'], data['Budget Bus'], data['Total'], id_planif
         ))
-
         conn.commit()
         conn.close()
         return True
-    except Exception as e:
-        st.error(f"Erreur lors de la modification : {str(e)}")
+    except:
         return False
 
 def supprimer_planification(id_planif):
-    """Supprime une planification"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-
         cursor.execute("DELETE FROM planifications WHERE ID=?", (id_planif,))
-
         conn.commit()
         conn.close()
         return True
-    except Exception as e:
-        st.error(f"Erreur lors de la suppression : {str(e)}")
+    except:
         return False
 
-# Initialisation de la base de données
+# Initialisation
 init_database()
 
-# Chargement initial des données
-if 'db_planification' not in st.session_state or st.session_state.get('reload_data', False):
+if 'db_planification' not in st.session_state:
     st.session_state.db_planification = charger_toutes_planifications()
-    st.session_state.reload_data = False
 
-st.title("🗓️ Planification Digitale SADI")
+# --- EN-TÊTE ---
+col_logo, col_title = st.columns([1, 5])
+with col_title:
+    st.title("Planification Mensuelle SADI")
+
 st.markdown("---")
 
-# --- PARAMÈTRES DE COÛTS (Sidebar) ---
-st.sidebar.header("💰 Configuration des Tarifs")
-cout_bus_jour = st.sidebar.number_input("Location Bus / Jour (FCFA)", value=60000)
-cout_resto_vto = st.sidebar.number_input("Resto / VTO / Jour (FCFA)", value=1500)
+# --- SIDEBAR MINIMALISTE ---
+with st.sidebar:
+    st.markdown("### Paramètres")
+    cout_bus_jour = st.number_input("Bus/jour (FCFA)", value=60000, step=5000)
+    cout_resto_vto = st.number_input("Resto/VTO/jour (FCFA)", value=1500, step=100)
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("💾 Gestion des Données")
-
-# Bouton de rechargement
-if st.sidebar.button("🔄 Recharger les données", type="primary"):
-    st.session_state.db_planification = charger_toutes_planifications()
-    st.sidebar.success("✅ Données rechargées depuis la base !")
-    st.rerun()
-
-# Indicateur de statut
-if not st.session_state.db_planification.empty:
-    nb_planifications = len(st.session_state.db_planification)
-    st.sidebar.info(f"📊 {nb_planifications} planification(s) dans la base")
-    st.sidebar.success(f"✅ Base de données : {DB_FILE}")
-
-# Bouton d'export CSV
-if not st.session_state.db_planification.empty:
-    csv = st.session_state.db_planification.to_csv(index=False).encode('utf-8')
-    st.sidebar.download_button(
-        label="📥 Exporter en CSV",
-        data=csv,
-        file_name=f"planification_sadi_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-        mime="text/csv"
-    )
-
-# --- ONGLETS PRINCIPAUX ---
-tab1, tab2, tab3 = st.tabs(["✍️ Nouvelle Planification", "✏️ Modifier/Supprimer", "📊 Tableau de Bord"])
-
-# ==================== ONGLET 1 : NOUVELLE PLANIFICATION ====================
-with tab1:
-    st.header("✍️ Saisie de la Planification")
-
-    with st.container():
-        col1, col2 = st.columns(2)
-
-        with col1:
-            sadi = st.selectbox("SADI", ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"])
-            animation = st.text_input("Nom de l'animation", placeholder="Ex: Tous sur la Fibre")
-
-        with col2:
-            # Gestion dynamique du mois et de l'année
-            annee_actuelle = datetime.now().year
-            mois_noms = list(calendar.month_name)[1:]
-            mois_select = st.selectbox("Mois de planification", mois_noms, index=datetime.now().month-1)
-
-            # Trouver le nombre de jours exact pour ce mois
-            index_mois = mois_noms.index(mois_select) + 1
-            nb_jours_mois = calendar.monthrange(annee_actuelle, index_mois)[1]
-
-        st.write(f"### 📅 Calendrier de {mois_select} {annee_actuelle}")
-        st.info("Cochez les jours où l'animation aura lieu sur le terrain.")
-
-        # Affichage des jours sous forme de grille (7 colonnes pour une semaine)
-        jours_selectionnes = []
-        cols_jours = st.columns(7)
-        for i in range(1, nb_jours_mois + 1):
-            with cols_jours[(i-1) % 7]:
-                if st.checkbox(f"J{i}", key=f"new_day_{i}"):
-                    jours_selectionnes.append(i)
-
+    if not st.session_state.db_planification.empty:
         st.markdown("---")
+        csv = st.session_state.db_planification.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Exporter CSV",
+            data=csv,
+            file_name=f"planification_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
-        col_res1, col_res2, col_res3 = st.columns(3)
-        with col_res1:
-            vto_count = st.number_input("Nombre de VTO", min_value=0, value=60, key="new_vto")
-        with col_res2:
-            bus_count = st.number_input("Nombre de Bus", min_value=0, value=2, key="new_bus")
-        with col_res3:
-            nb_jours_actifs = len(jours_selectionnes)
-            st.metric("Total Jours Actifs", nb_jours_actifs)
+# --- ONGLETS ---
+tab1, tab2, tab3 = st.tabs(["Nouvelle planification", "Modifier / Supprimer", "Tableau de bord"])
 
-        # CALCULS BUDGÉTAIRES
-        budget_resto = vto_count * cout_resto_vto * nb_jours_actifs
-        budget_bus = bus_count * cout_bus_jour * nb_jours_actifs
-        total_budget = budget_resto + budget_bus
+# ==================== ONGLET 1 ====================
+with tab1:
+    col1, col2 = st.columns(2)
 
-        st.subheader(f"💵 Récapitulatif Budgétaire : {total_budget:,.0f} FCFA")
+    with col1:
+        sadi = st.selectbox("SADI", ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"])
+        animation = st.text_input("Animation", placeholder="Ex: Tous sur la Fibre")
 
-        if st.button("💾 Enregistrer la planification du mois", type="primary"):
+    with col2:
+        annee_actuelle = datetime.now().year
+        mois_noms = list(calendar.month_name)[1:]
+        mois_select = st.selectbox("Mois", mois_noms, index=datetime.now().month-1)
+        index_mois = mois_noms.index(mois_select) + 1
+        nb_jours_mois = calendar.monthrange(annee_actuelle, index_mois)[1]
+
+    st.markdown(f"### 📅 Calendrier - {mois_select} {annee_actuelle}")
+
+    # Calendrier
+    jours_selectionnes = []
+    cols_jours = st.columns(7)
+    for i in range(1, nb_jours_mois + 1):
+        with cols_jours[(i-1) % 7]:
+            if st.checkbox(f"{i}", key=f"new_day_{i}"):
+                jours_selectionnes.append(i)
+
+    st.markdown("---")
+
+    col_res1, col_res2, col_res3 = st.columns(3)
+    with col_res1:
+        vto_count = st.number_input("Nombre de VTO", min_value=0, value=60, key="new_vto")
+    with col_res2:
+        bus_count = st.number_input("Nombre de Bus", min_value=0, value=2, key="new_bus")
+    with col_res3:
+        nb_jours_actifs = len(jours_selectionnes)
+        st.metric("Jours sélectionnés", nb_jours_actifs)
+
+    # Calculs
+    budget_resto = vto_count * cout_resto_vto * nb_jours_actifs
+    budget_bus = bus_count * cout_bus_jour * nb_jours_actifs
+    total_budget = budget_resto + budget_bus
+
+    st.markdown(f"### Budget total : **{total_budget:,.0f} FCFA**")
+
+    col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
+    with col_btn2:
+        if st.button("Enregistrer", type="primary", use_container_width=True):
             if not jours_selectionnes:
-                st.error("Veuillez sélectionner au moins un jour dans le calendrier.")
+                st.error("Sélectionnez au moins un jour")
             else:
                 nouvelle_entree = {
                     "SADI": sadi,
@@ -234,44 +321,36 @@ with tab1:
                 }
 
                 if sauvegarder_planification(nouvelle_entree):
-                    st.success(f"✅ Planification de {mois_select} pour {sadi} enregistrée dans la base !")
-                    st.balloons()
-                    # Recharger les données
+                    st.success("Planification enregistrée")
                     st.session_state.db_planification = charger_toutes_planifications()
-                else:
-                    st.error("❌ Erreur lors de l'enregistrement dans la base de données")
+                    st.rerun()
 
-# ==================== ONGLET 2 : MODIFIER/SUPPRIMER ====================
+# ==================== ONGLET 2 ====================
 with tab2:
-    st.header("✏️ Modifier ou Supprimer une Planification")
-
     if not st.session_state.db_planification.empty:
-        # Affichage de toutes les planifications
-        st.subheader("📋 Liste des Planifications Existantes")
-        df_display = st.session_state.db_planification.copy()
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        st.dataframe(
+            st.session_state.db_planification,
+            use_container_width=True,
+            hide_index=True,
+            height=300
+        )
 
         st.markdown("---")
 
-        # Sélection de la planification à modifier
         col_select, col_action = st.columns([3, 1])
 
         with col_select:
-            # Créer une liste d'options pour la sélection
             options = []
             for idx, row in st.session_state.db_planification.iterrows():
                 option = f"ID {row['ID']} - {row['SADI']} - {row['Mois']} {row['Annee']} - {row['Animation']}"
                 options.append(option)
 
-            selected_option = st.selectbox("Sélectionnez une planification à modifier/supprimer", options)
+            selected_option = st.selectbox("Sélectionner une planification", options, label_visibility="collapsed")
             selected_id = int(selected_option.split(" - ")[0].replace("ID ", ""))
 
         with col_action:
-            st.write("")
-            st.write("")
-            action = st.radio("Action", ["Modifier", "Supprimer"], horizontal=True)
+            action = st.radio("", ["Modifier", "Supprimer"], horizontal=True, label_visibility="collapsed")
 
-        # Récupérer la ligne sélectionnée
         selected_row = st.session_state.db_planification[
             st.session_state.db_planification['ID'] == selected_id
         ].iloc[0]
@@ -279,22 +358,17 @@ with tab2:
         st.markdown("---")
 
         if action == "Supprimer":
-            st.warning(f"⚠️ Vous êtes sur le point de supprimer la planification : **{selected_row['SADI']} - {selected_row['Mois']} {selected_row['Annee']}**")
+            st.warning(f"Supprimer : **{selected_row['SADI']}** - {selected_row['Mois']} {selected_row['Annee']}")
 
-            col_confirm, col_cancel = st.columns([1, 4])
-            with col_confirm:
-                if st.button("🗑️ Confirmer la suppression", type="primary"):
+            col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
+            with col_btn2:
+                if st.button("Confirmer", type="primary", use_container_width=True):
                     if supprimer_planification(selected_id):
-                        st.success("✅ Planification supprimée de la base !")
-                        # Recharger les données
+                        st.success("Supprimée")
                         st.session_state.db_planification = charger_toutes_planifications()
                         st.rerun()
-                    else:
-                        st.error("❌ Erreur lors de la suppression")
 
         else:  # Modifier
-            st.subheader(f"✏️ Modification de : {selected_row['SADI']} - {selected_row['Mois']} {selected_row['Annee']}")
-
             with st.form("form_modification"):
                 col1, col2 = st.columns(2)
 
@@ -304,24 +378,18 @@ with tab2:
                         ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"],
                         index=["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"].index(selected_row['SADI'])
                     )
-                    edit_animation = st.text_input("Nom de l'animation", value=selected_row['Animation'])
+                    edit_animation = st.text_input("Animation", value=selected_row['Animation'])
 
                 with col2:
                     mois_noms = list(calendar.month_name)[1:]
-                    edit_mois = st.selectbox(
-                        "Mois",
-                        mois_noms,
-                        index=mois_noms.index(selected_row['Mois'])
-                    )
+                    edit_mois = st.selectbox("Mois", mois_noms, index=mois_noms.index(selected_row['Mois']))
                     edit_annee = st.number_input("Année", value=int(selected_row['Annee']), min_value=2020, max_value=2030)
 
-                # Calendrier pour modification
+                # Calendrier
                 index_mois = mois_noms.index(edit_mois) + 1
                 nb_jours_mois = calendar.monthrange(int(edit_annee), index_mois)[1]
 
-                st.write(f"### 📅 Calendrier de {edit_mois} {edit_annee}")
-
-                # Récupérer les jours déjà sélectionnés
+                st.markdown(f"### 📅 Calendrier - {edit_mois} {edit_annee}")
                 jours_existants = [int(j.strip()) for j in str(selected_row['Jours']).split(',') if j.strip().isdigit()]
 
                 edit_jours_selectionnes = []
@@ -329,30 +397,29 @@ with tab2:
                 for i in range(1, nb_jours_mois + 1):
                     with cols_jours[(i-1) % 7]:
                         is_checked = i in jours_existants
-                        if st.checkbox(f"J{i}", key=f"edit_day_{i}", value=is_checked):
+                        if st.checkbox(f"{i}", key=f"edit_day_{i}", value=is_checked):
                             edit_jours_selectionnes.append(i)
 
                 col_res1, col_res2, col_res3 = st.columns(3)
                 with col_res1:
-                    edit_vto = st.number_input("Nombre de VTO", min_value=0, value=int(selected_row['VTO']), key="edit_vto")
+                    edit_vto = st.number_input("VTO", min_value=0, value=int(selected_row['VTO']), key="edit_vto")
                 with col_res2:
-                    edit_bus = st.number_input("Nombre de Bus", min_value=0, value=int(selected_row['Bus']), key="edit_bus")
+                    edit_bus = st.number_input("Bus", min_value=0, value=int(selected_row['Bus']), key="edit_bus")
                 with col_res3:
                     edit_nb_jours = len(edit_jours_selectionnes)
-                    st.metric("Total Jours Actifs", edit_nb_jours)
+                    st.metric("Jours sélectionnés", edit_nb_jours)
 
-                # Recalcul du budget
                 edit_budget_resto = edit_vto * cout_resto_vto * edit_nb_jours
                 edit_budget_bus = edit_bus * cout_bus_jour * edit_nb_jours
                 edit_total_budget = edit_budget_resto + edit_budget_bus
 
-                st.subheader(f"💵 Nouveau Récapitulatif Budgétaire : {edit_total_budget:,.0f} FCFA")
+                st.markdown(f"### Budget total : **{edit_total_budget:,.0f} FCFA**")
 
-                submitted = st.form_submit_button("💾 Enregistrer les modifications", type="primary")
+                submitted = st.form_submit_button("Enregistrer les modifications", type="primary", use_container_width=True)
 
                 if submitted:
                     if not edit_jours_selectionnes:
-                        st.error("Veuillez sélectionner au moins un jour dans le calendrier.")
+                        st.error("Sélectionnez au moins un jour")
                     else:
                         data_modifiee = {
                             "SADI": edit_sadi,
@@ -369,32 +436,24 @@ with tab2:
                         }
 
                         if modifier_planification(selected_id, data_modifiee):
-                            st.success(f"✅ Planification modifiée dans la base !")
-                            st.balloons()
-                            # Recharger les données
+                            st.success("Planification modifiée")
                             st.session_state.db_planification = charger_toutes_planifications()
                             st.rerun()
-                        else:
-                            st.error("❌ Erreur lors de la modification")
-
     else:
-        st.info("📭 Aucune planification à modifier. Créez-en une dans l'onglet 'Nouvelle Planification'.")
+        st.info("Aucune planification disponible")
 
-# ==================== ONGLET 3 : TABLEAU DE BORD ====================
+# ==================== ONGLET 3 ====================
 with tab3:
-    st.header("📊 Suivi Bureau - Vue Mensuelle")
-
     if not st.session_state.db_planification.empty:
-        # Filtre par mois pour le décideur
         mois_noms = list(calendar.month_name)[1:]
 
-        col_filtre1, col_filtre2 = st.columns([2, 2])
+        col_filtre1, col_filtre2 = st.columns(2)
         with col_filtre1:
-            mois_filtre = st.selectbox("Filtrer par mois", ["Tous"] + mois_noms)
+            mois_filtre = st.selectbox("Mois", ["Tous"] + mois_noms)
         with col_filtre2:
-            sadi_filtre = st.selectbox("Filtrer par SADI", ["Tous"] + ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"])
+            sadi_filtre = st.selectbox("SADI", ["Tous"] + ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"])
 
-        # Appliquer les filtres
+        # Filtres
         df_mois = st.session_state.db_planification.copy()
 
         if mois_filtre != "Tous":
@@ -404,33 +463,29 @@ with tab3:
             df_mois = df_mois[df_mois["SADI"] == sadi_filtre]
 
         if not df_mois.empty:
+            # Métriques
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric(f"Budget total", f"{df_mois['Total'].sum():,.0f} FCFA")
-            m2.metric("Total Bus mobilisés", int(df_mois['Bus'].sum()))
-            m3.metric("Total VTO mobilisés", int(df_mois['VTO'].sum()))
-            m4.metric("Nombre de planifications", len(df_mois))
+            m1.metric("Budget total", f"{df_mois['Total'].sum():,.0f} FCFA")
+            m2.metric("Bus", int(df_mois['Bus'].sum()))
+            m3.metric("VTO", int(df_mois['VTO'].sum()))
+            m4.metric("Planifications", len(df_mois))
 
             st.markdown("---")
-            st.dataframe(df_mois, use_container_width=True, hide_index=True)
+            st.dataframe(df_mois, use_container_width=True, hide_index=True, height=400)
 
             # Graphiques
             col_graph1, col_graph2 = st.columns(2)
 
             with col_graph1:
-                st.subheader("💰 Budget par SADI")
+                st.markdown("#### Budget par SADI")
                 budget_par_sadi = df_mois.groupby("SADI")["Total"].sum().sort_values(ascending=False)
                 st.bar_chart(budget_par_sadi)
 
             with col_graph2:
-                st.subheader("📊 Répartition par mois")
+                st.markdown("#### Budget par mois")
                 budget_par_mois = df_mois.groupby("Mois")["Total"].sum()
                 st.bar_chart(budget_par_mois)
         else:
-            st.warning(f"Aucune donnée ne correspond aux filtres sélectionnés")
+            st.warning("Aucune donnée pour ces filtres")
     else:
-        st.info("📭 La base de données est vide. Veuillez saisir une planification dans l'onglet 'Nouvelle Planification'.")
-
-# Message de rappel en bas de page
-st.markdown("---")
-st.success(f"✅ Connecté à la base de données : {DB_FILE}")
-st.caption(f"Dernière mise à jour : {datetime.now().strftime('%d/%m/%Y à %H:%M')}")
+        st.info("La base de données est vide")

@@ -247,12 +247,42 @@ with st.sidebar:
 
     if not st.session_state.db_planification.empty:
         st.markdown("---")
-        csv = st.session_state.db_planification.to_csv(index=False).encode('utf-8')
+        from io import BytesIO
+
+        # Préparer les données pour Excel
+        colonnes_export = ['ID', 'SADI', 'Mois', 'Annee', 'Animation', 'VTO', 'Bus', 'Nb Jours', 'Total']
+        df_export = st.session_state.db_planification[colonnes_export].copy()
+
+        # Créer le fichier Excel en mémoire
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_export.to_excel(writer, index=False, sheet_name='Planifications')
+
+            # Formater la feuille
+            worksheet = writer.sheets['Planifications']
+
+            # Largeur des colonnes
+            column_widths = {'A': 8, 'B': 15, 'C': 12, 'D': 10, 'E': 30, 'F': 10, 'G': 10, 'H': 12, 'I': 18}
+            for col, width in column_widths.items():
+                worksheet.column_dimensions[col].width = width
+
+            # Styliser l'en-tête
+            from openpyxl.styles import Font, PatternFill, Alignment
+            header_fill = PatternFill(start_color="FF6600", end_color="FF6600", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF", size=11)
+
+            for cell in worksheet[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+
+        buffer.seek(0)
+
         st.download_button(
-            label="Exporter CSV",
-            data=csv,
-            file_name=f"planification_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
+            label="Exporter Excel",
+            data=buffer,
+            file_name=f"planification_sadi_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 

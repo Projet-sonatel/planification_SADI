@@ -8,7 +8,12 @@ import sqlite3
 st.set_page_config(
     page_title="Planification SADI",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
 )
 
 # CSS personnalisé - Couleurs Sonatel
@@ -120,8 +125,48 @@ st.markdown("""
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background-color: #f8f9fa;
+        background: linear-gradient(180deg, #003D7A 0%, #0052A3 100%);
     }
+
+    section[data-testid="stSidebar"] > div {
+        background: linear-gradient(180deg, #003D7A 0%, #0052A3 100%);
+    }
+
+    /* Sidebar - titres et textes en blanc */
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p {
+        color: white !important;
+    }
+
+    /* Sidebar - inputs */
+    section[data-testid="stSidebar"] input {
+        background-color: rgba(255, 255, 255, 0.9);
+        color: #003D7A;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 6px;
+    }
+
+    /* Sidebar - bouton download */
+    section[data-testid="stSidebar"] .stDownloadButton button {
+        background-color: #FF6600;
+        color: white;
+        border: none;
+        font-weight: 600;
+        border-radius: 6px;
+    }
+
+    section[data-testid="stSidebar"] .stDownloadButton button:hover {
+        background-color: #E65C00;
+    }
+
+    /* Masquer les éléments du menu en haut à droite */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display: none;}
+    button[title="View app in GitHub"] {display: none;}
+    button[kind="header"] {display: none;}
+    [data-testid="stToolbar"] {display: none;}
 
     /* Réduction des marges */
     .element-container {
@@ -239,14 +284,18 @@ if 'db_planification' not in st.session_state:
 st.title("Planification Mensuelle SADI")
 st.markdown("---")
 
-# --- SIDEBAR MINIMALISTE ---
+# --- SIDEBAR DESIGN ---
 with st.sidebar:
-    st.markdown("### Paramètres")
-    cout_bus_jour = st.number_input("Bus/jour (FCFA)", value=60000, step=5000)
-    cout_resto_vto = st.number_input("Resto/VTO/jour (FCFA)", value=1500, step=100)
+    st.markdown("### ⚙️ Configuration")
+    st.markdown("")
+
+    st.markdown("**Tarifs journaliers**")
+    cout_bus_jour = st.number_input("Location Bus (FCFA)", value=60000, step=5000)
+    cout_resto_vto = st.number_input("Restauration VTO (FCFA)", value=1500, step=100)
 
     if not st.session_state.db_planification.empty:
         st.markdown("---")
+        st.markdown("**Export des données**")
         from io import BytesIO
 
         # Préparer les données pour Excel
@@ -279,7 +328,7 @@ with st.sidebar:
         buffer.seek(0)
 
         st.download_button(
-            label="Exporter Excel",
+            label="📥 Exporter en Excel",
             data=buffer,
             file_name=f"planification_sadi_{datetime.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -2,47 +2,131 @@ import streamlit as st
 import pandas as pd
 import calendar
 from datetime import datetime
-import json
+import sqlite3
+import os
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="SADI - Planification Mensuelle", layout="wide")
 
-# --- FONCTIONS DE SAUVEGARDE ET CHARGEMENT ---
-def sauvegarder_donnees():
-    """Sauvegarde les données dans le stockage persistant"""
+# Nom de la base de données
+DB_FILE = "planifications_sadi.db"
+
+# --- FONCTIONS DE GESTION DE LA BASE DE DONNÉES ---
+def init_database():
+    """Initialise la base de données SQLite"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    # Créer la table si elle n'existe pas
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS planifications (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            SADI TEXT NOT NULL,
+            Mois TEXT NOT NULL,
+            Annee INTEGER NOT NULL,
+            Animation TEXT,
+            VTO INTEGER,
+            Bus INTEGER,
+            Jours TEXT,
+            Nb_Jours INTEGER,
+            Budget_Resto REAL,
+            Budget_Bus REAL,
+            Total REAL,
+            Date_Creation TEXT
+        )
+    ''')
+
+    conn.commit()
+    conn.close()
+
+def sauvegarder_planification(data):
+    """Sauvegarde une nouvelle planification dans la base de données"""
     try:
-        if not st.session_state.db_planification.empty:
-            data_json = st.session_state.db_planification.to_json(orient='records')
-            result = st.session_state.storage.set('planifications_sadi', data_json, shared=True)
-            return result is not None
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO planifications
+            (SADI, Mois, Annee, Animation, VTO, Bus, Jours, Nb_Jours, Budget_Resto, Budget_Bus, Total, Date_Creation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data['SADI'], data['Mois'], data['Annee'], data['Animation'],
+            data['VTO'], data['Bus'], data['Jours'], data['Nb Jours'],
+            data['Budget Resto'], data['Budget Bus'], data['Total'], data['Date_Creation']
+        ))
+
+        conn.commit()
+        conn.close()
         return True
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde : {str(e)}")
         return False
 
-def charger_donnees():
-    """Charge les données depuis le stockage persistant"""
+def charger_toutes_planifications():
+    """Charge toutes les planifications depuis la base de données"""
     try:
-        result = st.session_state.storage.get('planifications_sadi', shared=True)
-        if result and result.get('value'):
-            df = pd.read_json(result['value'], orient='records')
-            return df
-        return pd.DataFrame()
+        conn = sqlite3.connect(DB_FILE)
+        df = pd.read_sql_query("SELECT * FROM planifications ORDER BY ID DESC", conn)
+        conn.close()
+
+        # Renommer les colonnes pour correspondre à l'ancien format
+        if not df.empty:
+            df.rename(columns={
+                'Nb_Jours': 'Nb Jours',
+                'Budget_Resto': 'Budget Resto',
+                'Budget_Bus': 'Budget Bus'
+            }, inplace=True)
+
+        return df
     except Exception as e:
-        # Si la clé n'existe pas encore, retourner un DataFrame vide
         return pd.DataFrame()
 
-# Initialisation du stockage
-if 'storage' not in st.session_state:
-    st.session_state.storage = st.runtime.legacy_caching.get_storage()
+def modifier_planification(id_planif, data):
+    """Modifie une planification existante"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
 
-# Initialisation de la base de données en mémoire
-if 'db_planification' not in st.session_state:
-    st.session_state.db_planification = charger_donnees()
+        cursor.execute('''
+            UPDATE planifications
+            SET SADI=?, Mois=?, Annee=?, Animation=?, VTO=?, Bus=?,
+                Jours=?, Nb_Jours=?, Budget_Resto=?, Budget_Bus=?, Total=?
+            WHERE ID=?
+        ''', (
+            data['SADI'], data['Mois'], data['Annee'], data['Animation'],
+            data['VTO'], data['Bus'], data['Jours'], data['Nb Jours'],
+            data['Budget Resto'], data['Budget Bus'], data['Total'], id_planif
+        ))
 
-# Variable pour suivre si les données ont été modifiées
-if 'data_modified' not in st.session_state:
-    st.session_state.data_modified = False
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Erreur lors de la modification : {str(e)}")
+        return False
+
+def supprimer_planification(id_planif):
+    """Supprime une planification"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM planifications WHERE ID=?", (id_planif,))
+
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Erreur lors de la suppression : {str(e)}")
+        return False
+
+# Initialisation de la base de données
+init_database()
+
+# Chargement initial des données
+if 'db_planification' not in st.session_state or st.session_state.get('reload_data', False):
+    st.session_state.db_planification = charger_toutes_planifications()
+    st.session_state.reload_data = False
 
 st.title("🗓️ Planification Digitale SADI")
 st.markdown("---")
@@ -55,26 +139,17 @@ cout_resto_vto = st.sidebar.number_input("Resto / VTO / Jour (FCFA)", value=1500
 st.sidebar.markdown("---")
 st.sidebar.subheader("💾 Gestion des Données")
 
-# Bouton de sauvegarde manuelle
-if st.sidebar.button("💾 Sauvegarder maintenant", type="primary"):
-    if sauvegarder_donnees():
-        st.sidebar.success("✅ Données sauvegardées !")
-        st.session_state.data_modified = False
-    else:
-        st.sidebar.error("❌ Erreur de sauvegarde")
-
 # Bouton de rechargement
-if st.sidebar.button("🔄 Recharger les données"):
-    st.session_state.db_planification = charger_donnees()
-    st.sidebar.success("✅ Données rechargées !")
+if st.sidebar.button("🔄 Recharger les données", type="primary"):
+    st.session_state.db_planification = charger_toutes_planifications()
+    st.sidebar.success("✅ Données rechargées depuis la base !")
     st.rerun()
 
 # Indicateur de statut
 if not st.session_state.db_planification.empty:
     nb_planifications = len(st.session_state.db_planification)
-    st.sidebar.info(f"📊 {nb_planifications} planification(s) en mémoire")
-    if st.session_state.data_modified:
-        st.sidebar.warning("⚠️ Modifications non sauvegardées")
+    st.sidebar.info(f"📊 {nb_planifications} planification(s) dans la base")
+    st.sidebar.success(f"✅ Base de données : {DB_FILE}")
 
 # Bouton d'export CSV
 if not st.session_state.db_planification.empty:
@@ -143,14 +218,7 @@ with tab1:
             if not jours_selectionnes:
                 st.error("Veuillez sélectionner au moins un jour dans le calendrier.")
             else:
-                # Générer un ID unique
-                if st.session_state.db_planification.empty:
-                    new_id = 1
-                else:
-                    new_id = st.session_state.db_planification['ID'].max() + 1
-
                 nouvelle_entree = {
-                    "ID": new_id,
                     "SADI": sadi,
                     "Mois": mois_select,
                     "Annee": annee_actuelle,
@@ -165,19 +233,13 @@ with tab1:
                     "Date_Creation": datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
 
-                st.session_state.db_planification = pd.concat([
-                    st.session_state.db_planification,
-                    pd.DataFrame([nouvelle_entree])
-                ], ignore_index=True)
-
-                # Sauvegarde automatique
-                if sauvegarder_donnees():
-                    st.success(f"✅ Planification de {mois_select} pour {sadi} enregistrée et sauvegardée !")
-                    st.session_state.data_modified = False
+                if sauvegarder_planification(nouvelle_entree):
+                    st.success(f"✅ Planification de {mois_select} pour {sadi} enregistrée dans la base !")
                     st.balloons()
+                    # Recharger les données
+                    st.session_state.db_planification = charger_toutes_planifications()
                 else:
-                    st.warning(f"⚠️ Planification enregistrée mais non sauvegardée. Utilisez le bouton de sauvegarde.")
-                    st.session_state.data_modified = True
+                    st.error("❌ Erreur lors de l'enregistrement dans la base de données")
 
 # ==================== ONGLET 2 : MODIFIER/SUPPRIMER ====================
 with tab2:
@@ -222,18 +284,13 @@ with tab2:
             col_confirm, col_cancel = st.columns([1, 4])
             with col_confirm:
                 if st.button("🗑️ Confirmer la suppression", type="primary"):
-                    st.session_state.db_planification = st.session_state.db_planification[
-                        st.session_state.db_planification['ID'] != selected_id
-                    ].reset_index(drop=True)
-
-                    # Sauvegarde automatique
-                    if sauvegarder_donnees():
-                        st.success("✅ Planification supprimée et sauvegardée !")
-                        st.session_state.data_modified = False
+                    if supprimer_planification(selected_id):
+                        st.success("✅ Planification supprimée de la base !")
+                        # Recharger les données
+                        st.session_state.db_planification = charger_toutes_planifications()
+                        st.rerun()
                     else:
-                        st.warning("⚠️ Supprimée mais non sauvegardée. Utilisez le bouton de sauvegarde.")
-                        st.session_state.data_modified = True
-                    st.rerun()
+                        st.error("❌ Erreur lors de la suppression")
 
         else:  # Modifier
             st.subheader(f"✏️ Modification de : {selected_row['SADI']} - {selected_row['Mois']} {selected_row['Annee']}")
@@ -297,32 +354,28 @@ with tab2:
                     if not edit_jours_selectionnes:
                         st.error("Veuillez sélectionner au moins un jour dans le calendrier.")
                     else:
-                        # Mettre à jour la ligne
-                        idx = st.session_state.db_planification[
-                            st.session_state.db_planification['ID'] == selected_id
-                        ].index[0]
+                        data_modifiee = {
+                            "SADI": edit_sadi,
+                            "Mois": edit_mois,
+                            "Annee": edit_annee,
+                            "Animation": edit_animation,
+                            "VTO": edit_vto,
+                            "Bus": edit_bus,
+                            "Jours": ", ".join(map(str, edit_jours_selectionnes)),
+                            "Nb Jours": edit_nb_jours,
+                            "Budget Resto": edit_budget_resto,
+                            "Budget Bus": edit_budget_bus,
+                            "Total": edit_total_budget
+                        }
 
-                        st.session_state.db_planification.at[idx, 'SADI'] = edit_sadi
-                        st.session_state.db_planification.at[idx, 'Mois'] = edit_mois
-                        st.session_state.db_planification.at[idx, 'Annee'] = edit_annee
-                        st.session_state.db_planification.at[idx, 'Animation'] = edit_animation
-                        st.session_state.db_planification.at[idx, 'VTO'] = edit_vto
-                        st.session_state.db_planification.at[idx, 'Bus'] = edit_bus
-                        st.session_state.db_planification.at[idx, 'Jours'] = ", ".join(map(str, edit_jours_selectionnes))
-                        st.session_state.db_planification.at[idx, 'Nb Jours'] = edit_nb_jours
-                        st.session_state.db_planification.at[idx, 'Budget Resto'] = edit_budget_resto
-                        st.session_state.db_planification.at[idx, 'Budget Bus'] = edit_budget_bus
-                        st.session_state.db_planification.at[idx, 'Total'] = edit_total_budget
-
-                        # Sauvegarde automatique
-                        if sauvegarder_donnees():
-                            st.success(f"✅ Planification modifiée et sauvegardée !")
-                            st.session_state.data_modified = False
+                        if modifier_planification(selected_id, data_modifiee):
+                            st.success(f"✅ Planification modifiée dans la base !")
                             st.balloons()
+                            # Recharger les données
+                            st.session_state.db_planification = charger_toutes_planifications()
+                            st.rerun()
                         else:
-                            st.warning(f"⚠️ Modifiée mais non sauvegardée. Utilisez le bouton de sauvegarde.")
-                            st.session_state.data_modified = True
-                        st.rerun()
+                            st.error("❌ Erreur lors de la modification")
 
     else:
         st.info("📭 Aucune planification à modifier. Créez-en une dans l'onglet 'Nouvelle Planification'.")
@@ -379,9 +432,5 @@ with tab3:
 
 # Message de rappel en bas de page
 st.markdown("---")
-if st.session_state.data_modified:
-    st.warning("⚠️ Vous avez des modifications non sauvegardées. Utilisez le bouton '💾 Sauvegarder maintenant' dans la barre latérale.")
-else:
-    st.success("✅ Toutes les données sont sauvegardées")
-
+st.success(f"✅ Connecté à la base de données : {DB_FILE}")
 st.caption(f"Dernière mise à jour : {datetime.now().strftime('%d/%m/%Y à %H:%M')}")

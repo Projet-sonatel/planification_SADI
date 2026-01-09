@@ -135,7 +135,22 @@ st.markdown("""
     /* Sidebar - titres et textes en blanc */
     section[data-testid="stSidebar"] h3,
     section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] p {
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] a,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] [data-testid="stSidebarNavLink"],
+    section[data-testid="stSidebar"] [data-testid="stSidebarNavLink"] span {
+        color: white !important;
+    }
+
+    /* Links de navigation dans la sidebar */
+    .css-1544g2n, .css-1vq4p4l, .st-emotion-cache-1vq4p4l {
+        color: white !important;
+    }
+
+    /* Hover sur les liens */
+    section[data-testid="stSidebar"] a:hover {
+        background-color: rgba(255, 102, 0, 0.2);
         color: white !important;
     }
 
@@ -293,8 +308,9 @@ with st.sidebar:
     cout_bus_jour = st.number_input("Location Bus (FCFA)", value=60000, step=5000)
     cout_resto_vto = st.number_input("Restauration VTO (FCFA)", value=1500, step=100)
 
+    st.markdown("---")
+
     if not st.session_state.db_planification.empty:
-        st.markdown("---")
         st.markdown("**Export des données**")
         from io import BytesIO
 
@@ -334,6 +350,8 @@ with st.sidebar:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
+    else:
+        st.info("Aucune donnée à exporter")
 
 # --- ONGLETS (ordre modifié) ---
 tab1, tab2, tab3 = st.tabs(["Tableau de bord", "Nouvelle planification", "Modifier / Supprimer"])

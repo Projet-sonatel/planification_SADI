@@ -29,7 +29,7 @@ with tab1:
         col1, col2 = st.columns(2)
 
         with col1:
-            sadi = st.selectbox("SADI", ["THIAROYE", "RUFISQUE", "PIKINE", "GUEDIAWAYE", "KEUR MASSAR", "SUD EST", "NORD"])
+            sadi = st.selectbox("SADI", ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"])
             animation = st.text_input("Nom de l'animation", placeholder="Ex: Tous sur la Fibre")
 
         with col2:

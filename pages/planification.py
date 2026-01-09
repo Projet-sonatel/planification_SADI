@@ -123,13 +123,48 @@ st.markdown("""
         font-weight: 500;
     }
 
-    /* Sidebar */
+    /* Sidebar - Optimisation de l'espace */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #003D7A 0%, #0052A3 100%);
     }
 
     section[data-testid="stSidebar"] > div {
         background: linear-gradient(180deg, #003D7A 0%, #0052A3 100%);
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
+    }
+
+    /* Réduction des espacements dans la sidebar */
+    section[data-testid="stSidebar"] .element-container {
+        margin-bottom: 0.2rem !important;
+    }
+
+    section[data-testid="stSidebar"] h3 {
+        margin-top: 0 !important;
+        margin-bottom: 0.3rem !important;
+    }
+
+    section[data-testid="stSidebar"] .stMarkdown p {
+        margin-bottom: 0.2rem !important;
+        margin-top: 0.2rem !important;
+    }
+
+    /* Réduction de la hauteur des inputs dans la sidebar */
+    section[data-testid="stSidebar"] .stNumberInput > div > div > input {
+        padding: 0.3rem 0.5rem !important;
+    }
+
+    section[data-testid="stSidebar"] label {
+        margin-bottom: 0.1rem !important;
+    }
+
+    /* Réduction de l'espace du bouton download */
+    section[data-testid="stSidebar"] .stDownloadButton {
+        margin-top: 0.3rem !important;
+    }
+
+    section[data-testid="stSidebar"] .stDownloadButton button {
+        padding: 0.4rem 1rem !important;
     }
 
     /* Sidebar - titres et textes en blanc */
@@ -299,16 +334,15 @@ if 'db_planification' not in st.session_state:
 st.title("Planification Mensuelle SADI")
 st.markdown("---")
 
-# --- SIDEBAR DESIGN ---
+# --- SIDEBAR DESIGN OPTIMISÉ ---
 with st.sidebar:
     st.markdown("### ⚙️ Configuration")
-    st.markdown("")
 
     st.markdown("**Tarifs journaliers**")
     cout_bus_jour = st.number_input("Location Bus (FCFA)", value=60000, step=5000)
     cout_resto_vto = st.number_input("Restauration VTO (FCFA)", value=1500, step=100)
 
-    st.markdown("---")
+    st.markdown("<div style='margin: 0.5rem 0;'></div>", unsafe_allow_html=True)
 
     if not st.session_state.db_planification.empty:
         st.markdown("**Export des données**")
@@ -350,8 +384,6 @@ with st.sidebar:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
-    else:
-        st.info("Aucune donnée à exporter")
 
 # --- ONGLETS (ordre modifié) ---
 tab1, tab2, tab3 = st.tabs(["Tableau de bord", "Nouvelle planification", "Modifier / Supprimer"])

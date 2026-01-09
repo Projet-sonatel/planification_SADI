@@ -18,26 +18,37 @@ st.markdown("""
     :root {
         --sonatel-orange: #FF6600;
         --sonatel-blue: #003D7A;
-        --sonatel-light-blue: #0066CC;
     }
 
-    /* En-tête principal */
+    /* Réduction des espacements */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 1rem;
+    }
+
     h1 {
         color: #003D7A;
         font-weight: 700;
-        padding-bottom: 10px;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
     }
 
     h2, h3 {
         color: #003D7A;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
     }
 
-    /* Tabs */
+    /* Tabs centrés et compacts */
     .stTabs [data-baseweb="tab-list"] {
         gap: 2px;
         background-color: #f5f5f5;
         padding: 5px;
         border-radius: 8px;
+        width: 60%;
+        margin: 0 auto;
+        display: flex;
+        justify-content: center;
     }
 
     .stTabs [data-baseweb="tab"] {
@@ -45,7 +56,9 @@ st.markdown("""
         color: #003D7A;
         font-weight: 500;
         border-radius: 6px;
-        padding: 10px 20px;
+        padding: 10px 30px;
+        flex: 0 1 auto;
+        white-space: nowrap;
     }
 
     .stTabs [aria-selected="true"] {
@@ -85,21 +98,15 @@ st.markdown("""
         border-radius: 8px;
     }
 
-    /* Cards/Containers */
-    [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
-        background-color: #ffffff;
-        padding: 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-
     /* Messages */
     .stAlert {
         border-radius: 8px;
         border-left: 4px solid #FF6600;
+        padding: 0.5rem 1rem;
+        margin: 0.5rem 0;
     }
 
-    /* Checkbox personnalisé */
+    /* Checkbox */
     .stCheckbox label {
         font-weight: 500;
         color: #003D7A;
@@ -116,19 +123,18 @@ st.markdown("""
         background-color: #f8f9fa;
     }
 
-    /* Graphiques */
-    .stBarChart {
-        border-radius: 8px;
+    /* Réduction des marges */
+    .element-container {
+        margin-bottom: 0.5rem;
     }
-
-    /* Footer */
-    footer {visibility: hidden;}
 
     /* Séparateurs */
     hr {
-        margin: 2rem 0;
+        margin: 1rem 0;
         border-color: #e0e0e0;
     }
+
+    footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -230,10 +236,7 @@ if 'db_planification' not in st.session_state:
     st.session_state.db_planification = charger_toutes_planifications()
 
 # --- EN-TÊTE ---
-col_logo, col_title = st.columns([1, 5])
-with col_title:
-    st.title("Planification Mensuelle SADI")
-
+st.title("Planification Mensuelle SADI")
 st.markdown("---")
 
 # --- SIDEBAR MINIMALISTE ---
@@ -253,11 +256,56 @@ with st.sidebar:
             use_container_width=True
         )
 
-# --- ONGLETS ---
-tab1, tab2, tab3 = st.tabs(["Nouvelle planification", "Modifier / Supprimer", "Tableau de bord"])
+# --- ONGLETS (ordre modifié) ---
+tab1, tab2, tab3 = st.tabs(["Tableau de bord", "Nouvelle planification", "Modifier / Supprimer"])
 
-# ==================== ONGLET 1 ====================
+# ==================== ONGLET 1 : TABLEAU DE BORD ====================
 with tab1:
+    if not st.session_state.db_planification.empty:
+        mois_noms = list(calendar.month_name)[1:]
+
+        col_filtre1, col_filtre2 = st.columns(2)
+        with col_filtre1:
+            mois_filtre = st.selectbox("Mois", ["Tous"] + mois_noms)
+        with col_filtre2:
+            sadi_filtre = st.selectbox("SADI", ["Tous"] + ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"])
+
+        # Filtres
+        df_mois = st.session_state.db_planification.copy()
+
+        if mois_filtre != "Tous":
+            df_mois = df_mois[df_mois["Mois"] == mois_filtre]
+
+        if sadi_filtre != "Tous":
+            df_mois = df_mois[df_mois["SADI"] == sadi_filtre]
+
+        if not df_mois.empty:
+            # Métriques
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Budget total", f"{df_mois['Total'].sum():,.0f} FCFA")
+            m2.metric("Bus", int(df_mois['Bus'].sum()))
+            m3.metric("VTO", int(df_mois['VTO'].sum()))
+            m4.metric("Planifications", len(df_mois))
+
+            st.markdown("---")
+
+            # Afficher uniquement les colonnes pertinentes
+            colonnes_affichees = ['ID', 'SADI', 'Mois', 'Annee', 'Animation', 'VTO', 'Bus', 'Nb Jours', 'Total']
+            df_affichage = df_mois[colonnes_affichees]
+
+            st.dataframe(
+                df_affichage,
+                use_container_width=True,
+                hide_index=True,
+                height=500
+            )
+        else:
+            st.warning("Aucune donnée pour ces filtres")
+    else:
+        st.info("La base de données est vide")
+
+# ==================== ONGLET 2 : NOUVELLE PLANIFICATION ====================
+with tab2:
     col1, col2 = st.columns(2)
 
     with col1:
@@ -325,11 +373,15 @@ with tab1:
                     st.session_state.db_planification = charger_toutes_planifications()
                     st.rerun()
 
-# ==================== ONGLET 2 ====================
-with tab2:
+# ==================== ONGLET 3 : MODIFIER/SUPPRIMER ====================
+with tab3:
     if not st.session_state.db_planification.empty:
+        # Afficher uniquement les colonnes pertinentes
+        colonnes_affichees = ['ID', 'SADI', 'Mois', 'Annee', 'Animation', 'VTO', 'Bus', 'Nb Jours', 'Total']
+        df_affichage = st.session_state.db_planification[colonnes_affichees]
+
         st.dataframe(
-            st.session_state.db_planification,
+            df_affichage,
             use_container_width=True,
             hide_index=True,
             height=300
@@ -441,51 +493,3 @@ with tab2:
                             st.rerun()
     else:
         st.info("Aucune planification disponible")
-
-# ==================== ONGLET 3 ====================
-with tab3:
-    if not st.session_state.db_planification.empty:
-        mois_noms = list(calendar.month_name)[1:]
-
-        col_filtre1, col_filtre2 = st.columns(2)
-        with col_filtre1:
-            mois_filtre = st.selectbox("Mois", ["Tous"] + mois_noms)
-        with col_filtre2:
-            sadi_filtre = st.selectbox("SADI", ["Tous"] + ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"])
-
-        # Filtres
-        df_mois = st.session_state.db_planification.copy()
-
-        if mois_filtre != "Tous":
-            df_mois = df_mois[df_mois["Mois"] == mois_filtre]
-
-        if sadi_filtre != "Tous":
-            df_mois = df_mois[df_mois["SADI"] == sadi_filtre]
-
-        if not df_mois.empty:
-            # Métriques
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Budget total", f"{df_mois['Total'].sum():,.0f} FCFA")
-            m2.metric("Bus", int(df_mois['Bus'].sum()))
-            m3.metric("VTO", int(df_mois['VTO'].sum()))
-            m4.metric("Planifications", len(df_mois))
-
-            st.markdown("---")
-            st.dataframe(df_mois, use_container_width=True, hide_index=True, height=400)
-
-            # Graphiques
-            col_graph1, col_graph2 = st.columns(2)
-
-            with col_graph1:
-                st.markdown("#### Budget par SADI")
-                budget_par_sadi = df_mois.groupby("SADI")["Total"].sum().sort_values(ascending=False)
-                st.bar_chart(budget_par_sadi)
-
-            with col_graph2:
-                st.markdown("#### Budget par mois")
-                budget_par_mois = df_mois.groupby("Mois")["Total"].sum()
-                st.bar_chart(budget_par_mois)
-        else:
-            st.warning("Aucune donnée pour ces filtres")
-    else:
-        st.info("La base de données est vide")

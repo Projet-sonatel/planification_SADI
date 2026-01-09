@@ -2,13 +2,47 @@ import streamlit as st
 import pandas as pd
 import calendar
 from datetime import datetime
+import json
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="SADI - Planification Mensuelle", layout="wide")
 
+# --- FONCTIONS DE SAUVEGARDE ET CHARGEMENT ---
+def sauvegarder_donnees():
+    """Sauvegarde les données dans le stockage persistant"""
+    try:
+        if not st.session_state.db_planification.empty:
+            data_json = st.session_state.db_planification.to_json(orient='records')
+            result = st.session_state.storage.set('planifications_sadi', data_json, shared=True)
+            return result is not None
+        return True
+    except Exception as e:
+        st.error(f"Erreur lors de la sauvegarde : {str(e)}")
+        return False
+
+def charger_donnees():
+    """Charge les données depuis le stockage persistant"""
+    try:
+        result = st.session_state.storage.get('planifications_sadi', shared=True)
+        if result and result.get('value'):
+            df = pd.read_json(result['value'], orient='records')
+            return df
+        return pd.DataFrame()
+    except Exception as e:
+        # Si la clé n'existe pas encore, retourner un DataFrame vide
+        return pd.DataFrame()
+
+# Initialisation du stockage
+if 'storage' not in st.session_state:
+    st.session_state.storage = st.runtime.legacy_caching.get_storage()
+
 # Initialisation de la base de données en mémoire
 if 'db_planification' not in st.session_state:
-    st.session_state.db_planification = pd.DataFrame()
+    st.session_state.db_planification = charger_donnees()
+
+# Variable pour suivre si les données ont été modifiées
+if 'data_modified' not in st.session_state:
+    st.session_state.data_modified = False
 
 st.title("🗓️ Planification Digitale SADI")
 st.markdown("---")
@@ -17,6 +51,40 @@ st.markdown("---")
 st.sidebar.header("💰 Configuration des Tarifs")
 cout_bus_jour = st.sidebar.number_input("Location Bus / Jour (FCFA)", value=60000)
 cout_resto_vto = st.sidebar.number_input("Resto / VTO / Jour (FCFA)", value=1500)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("💾 Gestion des Données")
+
+# Bouton de sauvegarde manuelle
+if st.sidebar.button("💾 Sauvegarder maintenant", type="primary"):
+    if sauvegarder_donnees():
+        st.sidebar.success("✅ Données sauvegardées !")
+        st.session_state.data_modified = False
+    else:
+        st.sidebar.error("❌ Erreur de sauvegarde")
+
+# Bouton de rechargement
+if st.sidebar.button("🔄 Recharger les données"):
+    st.session_state.db_planification = charger_donnees()
+    st.sidebar.success("✅ Données rechargées !")
+    st.rerun()
+
+# Indicateur de statut
+if not st.session_state.db_planification.empty:
+    nb_planifications = len(st.session_state.db_planification)
+    st.sidebar.info(f"📊 {nb_planifications} planification(s) en mémoire")
+    if st.session_state.data_modified:
+        st.sidebar.warning("⚠️ Modifications non sauvegardées")
+
+# Bouton d'export CSV
+if not st.session_state.db_planification.empty:
+    csv = st.session_state.db_planification.to_csv(index=False).encode('utf-8')
+    st.sidebar.download_button(
+        label="📥 Exporter en CSV",
+        data=csv,
+        file_name=f"planification_sadi_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+        mime="text/csv"
+    )
 
 # --- ONGLETS PRINCIPAUX ---
 tab1, tab2, tab3 = st.tabs(["✍️ Nouvelle Planification", "✏️ Modifier/Supprimer", "📊 Tableau de Bord"])
@@ -75,8 +143,14 @@ with tab1:
             if not jours_selectionnes:
                 st.error("Veuillez sélectionner au moins un jour dans le calendrier.")
             else:
+                # Générer un ID unique
+                if st.session_state.db_planification.empty:
+                    new_id = 1
+                else:
+                    new_id = st.session_state.db_planification['ID'].max() + 1
+
                 nouvelle_entree = {
-                    "ID": len(st.session_state.db_planification) + 1,
+                    "ID": new_id,
                     "SADI": sadi,
                     "Mois": mois_select,
                     "Annee": annee_actuelle,
@@ -87,15 +161,23 @@ with tab1:
                     "Nb Jours": nb_jours_actifs,
                     "Budget Resto": budget_resto,
                     "Budget Bus": budget_bus,
-                    "Total": total_budget
+                    "Total": total_budget,
+                    "Date_Creation": datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
 
                 st.session_state.db_planification = pd.concat([
                     st.session_state.db_planification,
                     pd.DataFrame([nouvelle_entree])
                 ], ignore_index=True)
-                st.success(f"✅ Planification de {mois_select} pour {sadi} enregistrée !")
-                st.balloons()
+
+                # Sauvegarde automatique
+                if sauvegarder_donnees():
+                    st.success(f"✅ Planification de {mois_select} pour {sadi} enregistrée et sauvegardée !")
+                    st.session_state.data_modified = False
+                    st.balloons()
+                else:
+                    st.warning(f"⚠️ Planification enregistrée mais non sauvegardée. Utilisez le bouton de sauvegarde.")
+                    st.session_state.data_modified = True
 
 # ==================== ONGLET 2 : MODIFIER/SUPPRIMER ====================
 with tab2:
@@ -143,7 +225,14 @@ with tab2:
                     st.session_state.db_planification = st.session_state.db_planification[
                         st.session_state.db_planification['ID'] != selected_id
                     ].reset_index(drop=True)
-                    st.success("✅ Planification supprimée avec succès !")
+
+                    # Sauvegarde automatique
+                    if sauvegarder_donnees():
+                        st.success("✅ Planification supprimée et sauvegardée !")
+                        st.session_state.data_modified = False
+                    else:
+                        st.warning("⚠️ Supprimée mais non sauvegardée. Utilisez le bouton de sauvegarde.")
+                        st.session_state.data_modified = True
                     st.rerun()
 
         else:  # Modifier
@@ -156,7 +245,7 @@ with tab2:
                     edit_sadi = st.selectbox(
                         "SADI",
                         ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"],
-                        index=["THIAROYE",  "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"].index(selected_row['SADI'])
+                        index=["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"].index(selected_row['SADI'])
                     )
                     edit_animation = st.text_input("Nom de l'animation", value=selected_row['Animation'])
 
@@ -225,8 +314,14 @@ with tab2:
                         st.session_state.db_planification.at[idx, 'Budget Bus'] = edit_budget_bus
                         st.session_state.db_planification.at[idx, 'Total'] = edit_total_budget
 
-                        st.success(f"✅ Planification modifiée avec succès !")
-                        st.balloons()
+                        # Sauvegarde automatique
+                        if sauvegarder_donnees():
+                            st.success(f"✅ Planification modifiée et sauvegardée !")
+                            st.session_state.data_modified = False
+                            st.balloons()
+                        else:
+                            st.warning(f"⚠️ Modifiée mais non sauvegardée. Utilisez le bouton de sauvegarde.")
+                            st.session_state.data_modified = True
                         st.rerun()
 
     else:
@@ -239,14 +334,21 @@ with tab3:
     if not st.session_state.db_planification.empty:
         # Filtre par mois pour le décideur
         mois_noms = list(calendar.month_name)[1:]
-        mois_filtre = st.selectbox("Filtrer la vue par mois", ["Tous"] + mois_noms)
 
-        if mois_filtre == "Tous":
-            df_mois = st.session_state.db_planification
-        else:
-            df_mois = st.session_state.db_planification[
-                st.session_state.db_planification["Mois"] == mois_filtre
-            ]
+        col_filtre1, col_filtre2 = st.columns([2, 2])
+        with col_filtre1:
+            mois_filtre = st.selectbox("Filtrer par mois", ["Tous"] + mois_noms)
+        with col_filtre2:
+            sadi_filtre = st.selectbox("Filtrer par SADI", ["Tous"] + ["THIAROYE", "ACAD", "ZIGUINCHOR", "SAINT LOUIS", "KAOLACK", "TAMBA"])
+
+        # Appliquer les filtres
+        df_mois = st.session_state.db_planification.copy()
+
+        if mois_filtre != "Tous":
+            df_mois = df_mois[df_mois["Mois"] == mois_filtre]
+
+        if sadi_filtre != "Tous":
+            df_mois = df_mois[df_mois["SADI"] == sadi_filtre]
 
         if not df_mois.empty:
             m1, m2, m3, m4 = st.columns(4)
@@ -263,13 +365,23 @@ with tab3:
 
             with col_graph1:
                 st.subheader("💰 Budget par SADI")
-                st.bar_chart(df_mois.set_index("SADI")["Total"])
+                budget_par_sadi = df_mois.groupby("SADI")["Total"].sum().sort_values(ascending=False)
+                st.bar_chart(budget_par_sadi)
 
             with col_graph2:
                 st.subheader("📊 Répartition par mois")
                 budget_par_mois = df_mois.groupby("Mois")["Total"].sum()
                 st.bar_chart(budget_par_mois)
         else:
-            st.warning(f"Aucune donnée enregistrée pour le mois de {mois_filtre}")
+            st.warning(f"Aucune donnée ne correspond aux filtres sélectionnés")
     else:
         st.info("📭 La base de données est vide. Veuillez saisir une planification dans l'onglet 'Nouvelle Planification'.")
+
+# Message de rappel en bas de page
+st.markdown("---")
+if st.session_state.data_modified:
+    st.warning("⚠️ Vous avez des modifications non sauvegardées. Utilisez le bouton '💾 Sauvegarder maintenant' dans la barre latérale.")
+else:
+    st.success("✅ Toutes les données sont sauvegardées")
+
+st.caption(f"Dernière mise à jour : {datetime.now().strftime('%d/%m/%Y à %H:%M')}")
